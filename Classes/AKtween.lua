@@ -88,9 +88,10 @@ local function calcArr(arr, accumulative, time, to, totFrames, step, ease, from,
             end
         end
     end
+
 end
 
-local function tweenCalc(config, arr)
+local function tweenCalc(config, arr, fCheck)
     if (not arr) then arr = {} end
     -- if (not arr) then arr = {} end
 
@@ -99,6 +100,7 @@ local function tweenCalc(config, arr)
     local totFrames = 0.06 * time
     local step = 1/totFrames
     local delay
+    local finishCheck = fCheck or {x = 0, y = 0, rotation = 0}
     if (config.delay) then
         delay = 0.06*config.delay
     end
@@ -114,7 +116,7 @@ local function tweenCalc(config, arr)
                 idx = idx + 1
             end
         end
-
+        finishCheck.x = finishCheck.x + x
         calcArr(xArr, false, time, x, totFrames, step, ease)
         arr.x = xArr
     end
@@ -129,7 +131,7 @@ local function tweenCalc(config, arr)
                 idx = idx + 1
             end
         end
-
+        finishCheck.y = finishCheck.y + y
         calcArr(yArr, false, time, y, totFrames, step, ease)
         arr.y = yArr
     end
@@ -144,7 +146,7 @@ local function tweenCalc(config, arr)
                 idx = idx + 1
             end
         end
-
+        finishCheck.rotation = finishCheck.rotation + rotation
         calcArr(rotArr, false, time, rotation, totFrames, step, ease)
         arr.rotation = rotArr
     end
@@ -167,7 +169,6 @@ local function tweenCalc(config, arr)
                 idx = idx + 1
             end
         end
-
         calcArr(xSclArr, true, time, to, totFrames, step, ease, from, true)
         arr.xScale = xSclArr
     end
@@ -190,7 +191,6 @@ local function tweenCalc(config, arr)
                 idx = idx + 1
             end
         end
-
         calcArr(ySclArr, true, time, to, totFrames, step, ease, from, true)
         arr.yScale = ySclArr
     end
@@ -213,7 +213,6 @@ local function tweenCalc(config, arr)
                 idx = idx + 1
             end
         end
-
         calcArr(alphaArr, true, time, to, totFrames, step, ease, from)
         arr.alpha = alphaArr
     end
@@ -228,9 +227,9 @@ local function tweenCalc(config, arr)
     -- anim.arr = arr
 
     local onComplete = config.onComplete
-    if (onComplete) then arr, totFrames = tweenCalc(onComplete, arr) end
+    if (onComplete) then arr, totFrames, finishCheck = tweenCalc(onComplete, arr, finishCheck) end
 
-    return arr, totFrames
+    return arr, totFrames, finishCheck
 end
 
 
@@ -246,6 +245,13 @@ function AKtween:enterFrame(event)
                 local tot = obj.tweenTot
                 local ct = obj.tweenCount
 
+                if (ct == 1) then
+                    obj.tweenCheck = {}
+                    for k,v in pairs(curTween) do
+                        obj.tweenCheck[k] = obj[k]
+                    end
+                end
+
                 for k,v in pairs(curTween) do
                     local value = v[ct]
                     if (value) then
@@ -259,6 +265,14 @@ function AKtween:enterFrame(event)
                 if (ct > tot) then
                     if (obj.tweenRepeat) then ct = 1
                     else table.insert(unregister, obj) end
+                    for k,v in pairs(curTween) do
+                        local value = obj.tweenFinishedCheck[k]
+                        if (value) then
+                            if (obj.tweenCheck[k] + value ~= obj[k]) then
+                                obj[k] = obj.tweenCheck[k] + value
+                            end
+                        end
+                    end
                 end
                 obj.tweenCount = ct
             end
@@ -281,8 +295,8 @@ end
 
 function AKtween:append(config)
     if (config) then
-        local values, totFrames = tweenCalc(config, self.values)
-        self.values, self.totFrames = values, totFrames
+        local values, totFrames, finishCheck = tweenCalc(config, self.values, self.finishCheck)
+        self.values, self.totFrames, self.finishCheck = values, totFrames, finishCheck
     else print('AKtween: Tween configuration failed.') end
 end
 
@@ -292,6 +306,7 @@ function AKtween:apply(obj, name)
     local anim = anims[name] or {}
     anim.values = self.values
     anim.totFrames = self.totFrames
+    anim.finishCheck = self.finishCheck
     anims[name] = anim
     obj.anims = anims
     obj.playTween = AKtween.playTween
@@ -302,6 +317,7 @@ function AKtween:playTween(name, config)
     local anim = self.anims[name]
     if (anim) then
         self.curTween = anim.values
+        self.tweenFinishedCheck = anim.finishCheck
         self.tweenCount = 1
         self.tweenTot = anim.totFrames
         if (config) then
